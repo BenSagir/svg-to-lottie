@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Figma SVG → Lottie converter</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #181b22; --panel2: #1f232c; --border: #2a2f3a;
+    --text: #e7eaf0; --muted: #9aa3b2; --accent: #5b8def; --accent2: #1d9e75;
+    --danger: #e24b4a; --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5; padding: 32px 20px;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+  .panel h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 14px; }
+  #drop {
+    border: 2px dashed var(--border); border-radius: var(--radius); padding: 34px 18px;
+    text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  #drop.drag { border-color: var(--accent); background: rgba(91,141,239,.08); }
+  #drop .big { font-size: 15px; margin-bottom: 4px; }
+  #drop .small { font-size: 13px; color: var(--muted); }
+  #drop b { color: var(--accent); }
+  input[type=file] { display: none; }
+  .opts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 16px; }
+  .opt label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .opt input {
+    width: 100%; background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font-size: 14px;
+  }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+  button {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 10px 16px; font-size: 14px; font-weight: 500; cursor: pointer;
+  }
+  button.secondary { background: var(--panel2); border: 1px solid var(--border); color: var(--text); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .toggle { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+  #stats { margin-top: 14px; font-size: 13px; color: var(--muted); }
+  #stats span { color: var(--text); }
+  #preview { position: relative; background: #f4f6fb; border-radius: var(--radius); aspect-ratio: 1.1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  #preview.checker {
+    background-color: #eef1f7;
+    background-image: linear-gradient(45deg,#dfe4ee 25%,transparent 25%),linear-gradient(-45deg,#dfe4ee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#dfe4ee 75%),linear-gradient(-45deg,transparent 75%,#dfe4ee 75%);
+    background-size: 20px 20px; background-position: 0 0,0 10px,10px -10px,-10px 0;
+  }
+  #lottie { width: 90%; height: 90%; }
+  #empty { color: #8893a7; font-size: 14px; }
+  .err { color: var(--danger); font-size: 13px; margin-top: 12px; white-space: pre-wrap; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 12px; }
+  code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  footer { color: var(--muted); font-size: 12px; margin-top: 28px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Figma SVG → Lottie converter</h1>
+  <p class="sub">Converts a CSS-animated SVG (Figma / Jitter export with <code>@keyframes</code>) into a Lottie JSON that <code>lottie-react-native</code> and lottie-web can play. Everything runs locally in your browser — nothing is uploaded.</p>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>1 · Upload</h2>
+      <div id="drop">
+        <div class="big">Drop an <b>.svg</b> here</div>
+        <div class="small">or click to choose a file</div>
+      </div>
+      <input type="file" id="file" accept=".svg,image/svg+xml" />
+
+      <div class="opts">
+        <div class="opt"><label title="Frames per second of the Lottie comp">FPS</label><input id="fps" type="number" value="60" min="1" /></div>
+        <div class="opt"><label title="Decimal places for coordinates (smaller = lighter file)">Precision</label><input id="precision" type="number" value="2" min="0" /></div>
+        <div class="opt"><label title="Padding added around the artwork so the bob / edge decorations never clip">Margin px</label><input id="margin" type="number" value="14" min="0" /></div>
+      </div>
+
+      <div class="row">
+        <button id="convertBtn" disabled>Convert</button>
+        <button id="downloadBtn" class="secondary" disabled>Download .json</button>
+      </div>
+      <label class="toggle" style="margin-top:14px"><input type="checkbox" id="checker" /> show transparency checker</label>
+      <div id="stats"></div>
+      <div id="err" class="err"></div>
+    </div>
+
+    <div class="panel">
+      <h2>2 · Preview</h2>
+      <div id="preview">
+        <div id="empty">Converted animation appears here</div>
+        <div id="lottie"></div>
+      </div>
+      <p class="note">If a path command outside <code>M L H V C Z</code> is found, conversion stops with the offending command — flatten arcs / quadratics in the export first. Motion-path (<code>offset-path</code>) elements are placed statically; rotation about a pivot is preserved.</p>
+    </div>
+  </div>
+
+  <footer>Runs entirely offline · drop a file to begin</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+<script>
+// ---------------------------------------------------------------------------
+// Conversion core — ported from svg-anim-to-lottie.mjs (verified on RN/lottie).
+// ---------------------------------------------------------------------------
+function makeConverter(opts) {
+  const FPS = opts.fps, PRECISION = opts.precision, MARGIN = opts.margin;
+  const RAD2DEG = 180 / Math.PI;
+  const round = n => { const f = 10 ** PRECISION; return Math.round(n * f) / f; };
+  const roundPt = p => [round(p[0]), round(p[1])];
+
+  const NAMED = {white:[1,1,1], black:[0,0,0], none:null, red:[1,0,0]};
+  function parseColor(raw) {
+    if (!raw) return null;
+    const v = raw.trim().toLowerCase();
+    if (v === 'none') return null;
+    if (NAMED[v] !== undefined) return NAMED[v];
+    let hex = v.replace('#','');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    if (hex.length !== 6) throw new Error('Unsupported color: ' + raw);
+    return [0,2,4].map(i => parseInt(hex.slice(i, i+2), 16) / 255);
+  }
+
+  const EPS = 1e-3;
+  function tokenizeD(d) {
+    const re = /([MLHVCSQTAZ])|(-?(?:\d*\.\d+|\d+\.?)(?:e[-+]?\d+)?)/gi;
+    const tokens = []; let m;
+    while ((m = re.exec(d))) tokens.push(m[1] ? m[1].toUpperCase() : Number(m[2]));
+    return tokens;
+  }
+  function pathToBeziers(d) {
+    const tokens = tokenizeD(d);
+    const subpaths = [];
+    let cur = null, cx = 0, cy = 0, startX = 0, startY = 0, i = 0, lastCmd = '';
+    const newSubpath = (x, y) => { cur = {c:false, v:[[x,y]], i:[[0,0]], o:[[0,0]]}; subpaths.push(cur); };
+    const lineTo = (x, y) => { cur.o[cur.o.length-1] = [0,0]; cur.v.push([x,y]); cur.i.push([0,0]); cur.o.push([0,0]); };
+    const curveTo = (c1x,c1y,c2x,c2y,x,y) => {
+      const last = cur.v[cur.v.length-1];
+      cur.o[cur.o.length-1] = [c1x-last[0], c1y-last[1]];
+      cur.v.push([x,y]); cur.i.push([c2x-x, c2y-y]); cur.o.push([0,0]);
+    };
+    const closeSub = () => {
+      if (!cur) return;
+      cur.c = true;
+      const first = cur.v[0], last = cur.v[cur.v.length-1];
+      if (cur.v.length > 1 && Math.abs(first[0]-last[0]) < EPS && Math.abs(first[1]-last[1]) < EPS) {
+        cur.i[0] = cur.i[cur.i.length-1]; cur.v.pop(); cur.i.pop(); cur.o.pop();
+      }
+      cx = startX; cy = startY;
+    };
+    while (i < tokens.length) {
+      let cmd = tokens[i];
+      if (typeof cmd === 'string') { i++; }
+      else { cmd = lastCmd === 'M' ? 'L' : lastCmd; if (!cmd) throw new Error('Path data starts with a number'); }
+      lastCmd = cmd;
+      switch (cmd) {
+        case 'M': cx = tokens[i++]; cy = tokens[i++]; startX = cx; startY = cy; newSubpath(cx, cy); break;
+        case 'L': cx = tokens[i++]; cy = tokens[i++]; lineTo(cx, cy); break;
+        case 'H': cx = tokens[i++]; lineTo(cx, cy); break;
+        case 'V': cy = tokens[i++]; lineTo(cx, cy); break;
+        case 'C': { const c1x=tokens[i++],c1y=tokens[i++],c2x=tokens[i++],c2y=tokens[i++]; cx=tokens[i++]; cy=tokens[i++]; curveTo(c1x,c1y,c2x,c2y,cx,cy); break; }
+        case 'Z': closeSub(); break;
+        default: throw new Error('Unsupported path command "' + cmd + '". Flatten arcs/quadratics/shortcuts to absolute M/L/H/V/C/Z first.');
+      }
+    }
+    return subpaths;
+  }
+
+  const TIMING = {
+    linear: {o:{x:[1],y:[1]}, i:{x:[0],y:[0]}},
+    ease: {o:{x:[0.25],y:[0.1]}, i:{x:[0.25],y:[1]}},
+    'ease-in': {o:{x:[0.42],y:[0]}, i:{x:[1],y:[1]}},
+    'ease-out': {o:{x:[0],y:[0]}, i:{x:[0.58],y:[1]}},
+    'ease-in-out': {o:{x:[0.42],y:[0]}, i:{x:[0.58],y:[1]}},
+  };
+
+  function parseStyleBlock(css) {
+    const keyframes = {};
+    const kfRe = /@keyframes\s+([\w-]+)\s*\{([\s\S]*?)\}\s*(?=@|#|$)/g;
+    let km;
+    while ((km = kfRe.exec(css))) {
+      const name = km[1], body = km[2], stops = [];
+      const stopRe = /(\d+(?:\.\d+)?)%\s*\{([^}]*)\}/g;
+      let sm;
+      while ((sm = stopRe.exec(body))) {
+        const pct = Number(sm[1]), decl = sm[2];
+        let x = 0, y = 0, t;
+        const txRe = /translateX\(([-\d.]+)px\)/g, tyRe = /translateY\(([-\d.]+)px\)/g;
+        while ((t = txRe.exec(decl))) x += Number(t[1]);
+        while ((t = tyRe.exec(decl))) y += Number(t[1]);
+        const piv = decl.match(/translate\(\s*([-\d.]+)px,\s*([-\d.]+)px\s*\)/);
+        const rot = decl.match(/rotate\(\s*([-\d.]+)rad\s*\)/);
+        const pivotX = piv ? Number(piv[1]) : 0;
+        const pivotY = piv ? Number(piv[2]) : 0;
+        const rad = rot ? Number(rot[1]) : 0;
+        const tf = (decl.match(/animation-timing-function:\s*([\w-]+)/) || [])[1] || 'linear';
+        stops.push({pct, x, y, pivotX, pivotY, rad, timing: tf});
+      }
+      stops.sort((a, b) => a.pct - b.pct);
+      keyframes[name] = stops;
+    }
+    const anims = {};
+    const ruleRe = /#([\w-]+)\s*\{([^}]*)\}/g;
+    let rm;
+    while ((rm = ruleRe.exec(css))) {
+      const id = rm[1];
+      const a = rm[2].match(/animation:\s*([\w-]+)\s+([\d.]+)s/);
+      if (a) anims[id] = {kf: a[1], durSec: Number(a[2])};
+    }
+    return {keyframes, anims};
+  }
+
+  function attr(tag, name) {
+    const m = tag.match(new RegExp('(?<![\\w-])' + name + '="([^"]*)"'));
+    return m ? m[1] : null;
+  }
+  function parsePaths(svgText) {
+    const paths = [];
+    const re = /<path\b[^>]*\/?>/g;
+    let m;
+    while ((m = re.exec(svgText))) {
+      const tag = m[0];
+      const d = attr(tag, 'd');
+      if (!d) continue;
+      let tx = 0, ty = 0;
+      const tr = attr(tag, 'transform');
+      if (tr) {
+        const tm = tr.match(/translate\(\s*([-\d.]+)[ ,]+([-\d.]+)\s*\)/);
+        if (tm) { tx = Number(tm[1]); ty = Number(tm[2]); }
+      }
+      paths.push({ id: attr(tag,'id'), d, tx, ty, fill: attr(tag,'fill'), stroke: attr(tag,'stroke'), strokeWidth: attr(tag,'stroke-width') });
+    }
+    return paths;
+  }
+
+  function buildTransform(el, anim, kf, durFrames) {
+    const hasMotion = kf && kf.some(s => s.x !== 0 || s.y !== 0 || s.rad !== 0);
+    if (!anim || !kf || kf.length < 2 || !hasMotion) {
+      return { p:{a:0,k:[round(el.tx+MARGIN), round(el.ty+MARGIN), 0]}, a:{a:0,k:[0,0,0]}, r:{a:0,k:0} };
+    }
+    const pivotX = kf[0].pivotX || 0, pivotY = kf[0].pivotY || 0;
+    const hasRotation = kf.some(s => s.rad);
+    const posKeys = [], rotKeys = [];
+    kf.forEach((stop, idx) => {
+      const t = Math.round((stop.pct / 100) * durFrames);
+      const handle = TIMING[stop.timing] || TIMING.linear;
+      const last = idx === kf.length - 1;
+      const s = [round(stop.x + pivotX + MARGIN), round(stop.y + pivotY + MARGIN), 0];
+      posKeys.push(last ? {t, s} : {t, s, o: handle.o, i: handle.i});
+      if (hasRotation) {
+        const r = [round(stop.rad * RAD2DEG)];
+        rotKeys.push(last ? {t, s: r} : {t, s: r, o: handle.o, i: handle.i});
+      }
+    });
+    return { p:{a:1,k:posKeys}, a:{a:0,k:[round(pivotX), round(pivotY), 0]}, r: hasRotation ? {a:1,k:rotKeys} : {a:0,k:0} };
+  }
+
+  function shapeFor(el) {
+    const subpaths = pathToBeziers(el.d);
+    const it = subpaths.map((sp, idx) => ({ ty:'sh', nm:'path'+idx, ks:{a:0,k:{c:sp.c, v:sp.v.map(roundPt), i:sp.i.map(roundPt), o:sp.o.map(roundPt)}} }));
+    const fill = parseColor(el.fill), stroke = parseColor(el.stroke);
+    if (fill) it.push({ty:'fl', nm:'fill', c:{a:0,k:fill}, o:{a:0,k:100}, r:1});
+    if (stroke) it.push({ty:'st', nm:'stroke', c:{a:0,k:stroke}, o:{a:0,k:100}, w:{a:0,k: el.strokeWidth ? Number(el.strokeWidth) : 1}, lc:2, lj:2, ml:4});
+    it.push({ty:'tr', p:{a:0,k:[0,0]}, a:{a:0,k:[0,0]}, s:{a:0,k:[100,100]}, r:{a:0,k:0}, o:{a:0,k:100}});
+    return {ty:'gr', nm: el.id || 'group', it};
+  }
+
+  function attrRoot(svgText, name) {
+    const m = svgText.match(new RegExp('(?<![\\w-])' + name + '="([^"]*)"'));
+    return m ? m[1] : null;
+  }
+
+  return function convert(svgText, name) {
+    const width = Number(attrRoot(svgText, 'width')) || 0;
+    const height = Number(attrRoot(svgText, 'height')) || 0;
+    const styleMatch = svgText.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+    const {keyframes, anims} = styleMatch ? parseStyleBlock(styleMatch[1]) : {keyframes:{}, anims:{}};
+    const paths = parsePaths(svgText);
+    if (!paths.length) throw new Error('No <path> elements found in the SVG.');
+
+    let maxDur = 0;
+    for (const el of paths) { const a = anims[el.id]; if (a) maxDur = Math.max(maxDur, a.durSec); }
+    if (maxDur === 0) maxDur = 1;
+    const compFrames = Math.round(maxDur * FPS);
+
+    const layers = [];
+    let ind = 1;
+    for (let idx = paths.length - 1; idx >= 0; idx--) {
+      const el = paths[idx];
+      const a = anims[el.id];
+      const kf = a ? keyframes[a.kf] : null;
+      const durFrames = a ? Math.round(a.durSec * FPS) : compFrames;
+      const tr = buildTransform(el, a, kf, durFrames);
+      layers.push({
+        ddd:0, ind: ind++, ty:4, nm: el.id || ('path'+idx), sr:1,
+        ks: { o:{a:0,k:100}, r:tr.r, p:tr.p, a:tr.a, s:{a:0,k:[100,100,100]} },
+        ao:0, shapes:[shapeFor(el)], ip:0, op:compFrames, st:0, bm:0,
+      });
+    }
+    return {
+      v:'5.7.4', fr:FPS, ip:0, op:compFrames,
+      w: width + 2*MARGIN, h: height + 2*MARGIN,
+      nm: (name || 'animation').replace(/\.svg$/i, ''), ddd:0, assets:[], layers,
+    };
+  };
+}
+
+// ---------------------------------------------------------------------------
+// UI wiring
+// ---------------------------------------------------------------------------
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+const convertBtn = document.getElementById('convertBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const statsEl = document.getElementById('stats');
+const errEl = document.getElementById('err');
+const emptyEl = document.getElementById('empty');
+const previewEl = document.getElementById('preview');
+const checkerEl = document.getElementById('checker');
+
+let svgText = null, svgName = null, lottieJson = null, anim = null;
+
+function setError(msg) { errEl.textContent = msg || ''; }
+
+drop.addEventListener('click', () => fileInput.click());
+['dragover','dragenter'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('drag'); }));
+['dragleave','dragend','drop'].forEach(e => drop.addEventListener(e, () => drop.classList.remove('drag')));
+drop.addEventListener('drop', ev => { ev.preventDefault(); if (ev.dataTransfer.files[0]) loadFile(ev.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+function loadFile(file) {
+  if (!/\.svg$/i.test(file.name) && file.type !== 'image/svg+xml') { setError('Please choose an .svg file.'); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    svgText = reader.result; svgName = file.name;
+    drop.querySelector('.big').innerHTML = 'Loaded <b>' + file.name + '</b>';
+    drop.querySelector('.small').textContent = 'click to choose a different file';
+    convertBtn.disabled = false;
+    setError('');
+    convert();
+  };
+  reader.readAsText(file);
+}
+
+function convert() {
+  if (!svgText) return;
+  setError('');
+  try {
+    const opts = {
+      fps: Math.max(1, Number(document.getElementById('fps').value) || 60),
+      precision: Math.max(0, Number(document.getElementById('precision').value) || 0),
+      margin: Math.max(0, Number(document.getElementById('margin').value) || 0),
+    };
+    const converter = makeConverter(opts);
+    lottieJson = converter(svgText, svgName);
+    renderPreview();
+    showStats();
+    downloadBtn.disabled = false;
+  } catch (e) {
+    lottieJson = null; downloadBtn.disabled = true;
+    setError('Conversion failed:\n' + e.message);
+    if (anim) { anim.destroy(); anim = null; }
+    emptyEl.style.display = ''; emptyEl.textContent = 'Conversion failed';
+  }
+}
+
+function showStats() {
+  const positioned = lottieJson.layers.filter(l => l.ks.p.a === 1).length;
+  const rotated = lottieJson.layers.filter(l => l.ks.r.a === 1).length;
+  const bytes = new Blob([JSON.stringify(lottieJson)]).size;
+  statsEl.innerHTML =
+    'Comp <span>' + lottieJson.w + '×' + lottieJson.h + '</span> · ' +
+    '<span>' + lottieJson.fr + '</span> fps · ' +
+    '<span>' + (lottieJson.op / lottieJson.fr).toFixed(2) + 's</span> · ' +
+    '<span>' + lottieJson.layers.length + '</span> layers (' + positioned + ' moving, ' + rotated + ' rotating) · ' +
+    '<span>' + (bytes / 1024).toFixed(0) + ' KB</span>';
+}
+
+function renderPreview() {
+  if (anim) { anim.destroy(); anim = null; }
+  emptyEl.style.display = 'none';
+  anim = lottie.loadAnimation({
+    container: document.getElementById('lottie'),
+    renderer: 'svg', loop: true, autoplay: true,
+    animationData: JSON.parse(JSON.stringify(lottieJson)),
+  });
+}
+
+function download() {
+  if (!lottieJson) return;
+  const blob = new Blob([JSON.stringify(lottieJson)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (svgName || 'animation').replace(/\.svg$/i, '') + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+convertBtn.addEventListener('click', convert);
+downloadBtn.addEventListener('click', download);
+['fps','precision','margin'].forEach(id => document.getElementById(id).addEventListener('change', () => { if (svgText) convert(); }));
+checkerEl.addEventListener('change', () => previewEl.classList.toggle('checker', checkerEl.checked));
+</script>
+</body>
+</html>
