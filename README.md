@@ -24,8 +24,17 @@ conversion happens locally.
 
 - Absolute path commands `M L H V C Z` (fails loudly on arcs/quadratics/shortcuts
   — flatten them in the export first).
-- `translateX` / `translateY` bob and rotation-about-a-pivot
-  (`translate(p) rotate(Nrad) translate(-p)`) are converted.
+- `translateX` / `translateY` bob, rotation and scaleX/Y about a pivot
+  (`translate(p) rotate(Nrad)|scaleX/Y(..) translate(-p)`), and opacity fade are
+  converted.
+- Nested `<g>` groups are folded in: a group's `translate` is applied to its
+  descendants, and an *animated* `<g>` (one with its own `animation:` rule,
+  including a plain translate bob) is baked into a single Lottie layer that
+  carries the group's animation, with children kept at their relative offsets.
+- Scientific-notation coordinates (e.g. `translate(142.547 4.34486e-05)`) in
+  transforms are parsed correctly.
+- Paths inside `<mask>`, `<clipPath>` and `<defs>` are ignored (not visible
+  artwork).
 - CSS motion-path animations (`offset-path` + `offset-distance`) aren't followed;
   those elements are placed statically at their base position.
 
